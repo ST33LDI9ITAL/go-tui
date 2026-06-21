@@ -151,20 +151,27 @@ func isScrollEvent(event Event) bool {
 }
 
 // ContainsPoint returns true if the screen-space point (x, y) is within the
-// element's bounds. For elements inside scrollable containers, this
-// automatically accounts for scroll offsets by adjusting the click point
-// through scrollable ancestors.
+// element's bounds. The element's layout.Rect is in content-space (relative to
+// the content area of its ancestors). To convert screen-space to content-space,
+// we subtract each ancestor's screen position and add back any scroll offsets.
 func (e *Element) ContainsPoint(x, y int) bool {
-	// The element's layout.Rect is in content-space (unscrolled coordinates).
-	// Screen-space coordinates need the cumulative scroll offset added so
-	// they match content-space. Each scrollable ancestor shifts content
-	// upward/leftward by its scroll offset, so we add scroll offsets to
-	// convert the screen point into the same coordinate system as the rect.
 	cx, cy := x, y
 	for p := e.parent; p != nil; p = p.parent {
+		// Subtract parent's screen position (Rect is absolute screen coords)
+		cx -= p.Rect().X
+		cy -= p.Rect().Y
+		// For scrollable ancestors, children are positioned in content-space
+		// starting from (0,0) within the content area. The content area starts
+		// at (padding, padding) inside the parent. Scroll offset shifts
+		// content up, so we add scroll offset to match screen coords.
 		if p.scrollMode != ScrollNone {
 			cx += p.scrollX
 			cy += p.scrollY
+			// Children are positioned relative to content area origin,
+			// not the parent's padding inset. Add back the padding so
+			// screen-to-content conversion is correct.
+			cx += p.style.Padding.Left
+			cy += p.style.Padding.Top
 		}
 	}
 	return e.layout.Rect.Contains(cx, cy)
