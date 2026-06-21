@@ -104,6 +104,8 @@ func (e *Element) SetOnBlur(fn func(*Element)) {
 
 // HandleEvent dispatches an event to this element's handler.
 // Only handles scroll events for scrollable elements.
+// If the event is a scroll event and this element doesn't consume it,
+// propagates up the tree to the nearest scrollable ancestor.
 // Returns true if the event was consumed.
 func (e *Element) HandleEvent(event Event) bool {
 	debug.Log("Element.HandleEvent: event=%T text=%q scrollMode=%v", event, e.text, e.scrollMode)
@@ -115,7 +117,36 @@ func (e *Element) HandleEvent(event Event) bool {
 		}
 	}
 
+	// Propagate scroll events (mouse wheel, scroll keys) up to
+	// the nearest scrollable ancestor. Without this, a non-scrollable
+	// child (e.g. a button inside a scrollable container) absorbs the
+	// event and the container never scrolls.
+	if isScrollEvent(event) {
+		for p := e.parent; p != nil; p = p.parent {
+			if p.scrollMode != ScrollNone {
+				if p.handleScrollEvent(event) {
+					return true
+				}
+				break // first scrollable ancestor tried and declined
+			}
+		}
+	}
+
 	debug.Log("Element.HandleEvent: event not consumed")
+	return false
+}
+
+// isScrollEvent returns true if the event is a mouse wheel or scroll key event.
+func isScrollEvent(event Event) bool {
+	if mouse, ok := event.(MouseEvent); ok {
+		return mouse.Button == MouseWheelUp || mouse.Button == MouseWheelDown
+	}
+	if key, ok := event.(KeyEvent); ok {
+		switch key.Key {
+		case KeyUp, KeyDown, KeyLeft, KeyRight, KeyPageUp, KeyPageDown, KeyHome, KeyEnd:
+			return true
+		}
+	}
 	return false
 }
 
