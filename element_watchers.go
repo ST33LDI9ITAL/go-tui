@@ -63,6 +63,7 @@ func (e *Element) WalkWatchers(fn func(Watcher)) {
 // ElementAt finds the deepest element containing the point (x, y).
 // Returns nil if no element contains the point.
 // Children are checked in reverse order since last child renders on top.
+// Accounts for scroll offsets of scrollable ancestors.
 func (e *Element) ElementAt(x, y int) *Element {
 	if e.hidden {
 		return nil
@@ -72,10 +73,23 @@ func (e *Element) ElementAt(x, y int) *Element {
 		return nil
 	}
 
-	// Check children in reverse order (last child renders on top)
+	// Check children in reverse order (last child renders on top).
+	// Children inside scrollable containers are positioned in content-space,
+	// so we need to add the scroll offset to the screen point to match.
 	for i := len(e.children) - 1; i >= 0; i-- {
-		if hit := e.children[i].ElementAt(x, y); hit != nil {
-			return hit
+		child := e.children[i]
+		if e.scrollMode != ScrollNone {
+			// Adjust point by scroll offset to convert from screen-space
+			// to the child's content-space coordinates.
+			scx := x + e.scrollX
+			scy := y + e.scrollY
+			if hit := child.ElementAt(scx, scy); hit != nil {
+				return hit
+			}
+		} else {
+			if hit := child.ElementAt(x, y); hit != nil {
+				return hit
+			}
 		}
 	}
 
