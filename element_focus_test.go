@@ -155,3 +155,98 @@ func TestElement_HandleEvent_KeyNotHandledByDefault(t *testing.T) {
 		t.Error("HandleEvent should return false for key events (key handling is via component KeyMap)")
 	}
 }
+
+func TestElement_HandleEvent_ScrollPropagatesToParent(t *testing.T) {
+	// Create a scrollable container with a non-scrollable button child.
+	// The child must be taller than the parent for scroll to be possible.
+	parent := New(WithScrollable(ScrollVertical), WithWidth(20), WithHeight(5))
+	child := New(WithWidth(10), WithHeight(20), WithFocusable(true)) // child taller than parent
+	parent.AddChild(child)
+
+	// Render to set up layout
+	buf := NewBuffer(80, 25)
+	parent.Render(buf, 80, 25)
+
+	// Mouse wheel down on the child should propagate to parent
+	event := MouseEvent{
+		Button: MouseWheelDown,
+		Action: MousePress,
+		X:      5,
+		Y:      5,
+	}
+
+	// Before scroll, offset should be 0
+	if _, sy := parent.ScrollOffset(); sy != 0 {
+		t.Fatalf("expected initial scroll offset 0, got %d", sy)
+	}
+
+	consumed := child.HandleEvent(event)
+	if !consumed {
+		t.Fatal("scroll event should be consumed by propagation to scrollable parent")
+	}
+
+	// Parent should have scrolled down by 1
+	if _, sy := parent.ScrollOffset(); sy != 1 {
+		t.Fatalf("expected scroll offset 1 after mouse wheel down, got %d", sy)
+	}
+}
+
+func TestElement_HandleEvent_ScrollDoesNotPropagatePastScrollable(t *testing.T) {
+	// A scrollable parent with a non-scrollable child that itself has a button.
+	// Event should stop at nearest scrollable ancestor.
+	inner := New(WithScrollable(ScrollVertical), WithWidth(20), WithHeight(5))
+	btn := New(WithWidth(10), WithHeight(15), WithFocusable(true)) // btn taller than inner
+	inner.AddChild(btn)
+
+	buf := NewBuffer(80, 25)
+	inner.Render(buf, 80, 25)
+
+	// Pre-scroll the inner container
+	inner.ScrollBy(0, 3)
+	// Re-render to update clamped offsets and content bounds
+	inner.Render(buf, 80, 25)
+
+	if _, sy := inner.ScrollOffset(); sy != 3 {
+		t.Fatalf("expected inner offset 3, got %d", sy)
+	}
+
+	event := MouseEvent{
+		Button: MouseWheelDown,
+		Action: MousePress,
+		X:      5,
+		Y:      5,
+	}
+	consumed := btn.HandleEvent(event)
+	if !consumed {
+		t.Fatal("scroll event should be consumed by inner scrollable")
+	}
+
+	if _, sy := inner.ScrollOffset(); sy != 4 {
+		t.Fatalf("expected inner offset 4, got %d", sy)
+	}
+}
+
+func TestElement_HandleEvent_NonScrollEventsDoNotPropagate(t *testing.T) {
+	parent := New(WithScrollable(ScrollVertical), WithWidth(20), WithHeight(10))
+	child := New(WithWidth(10), WithHeight(3), WithFocusable(true))
+	parent.AddChild(child)
+
+	buf := NewBuffer(80, 25)
+	parent.Render(buf, 80, 25)
+
+	// A mouse click should NOT propagate as a scroll
+	event := MouseEvent{
+		Button: MouseLeft,
+		Action: MousePress,
+		X:      5,
+		Y:      5,
+	}
+	consumed := child.HandleEvent(event)
+	if consumed {
+		t.Fatal("mouse click should not be consumed by scroll propagation")
+	}
+
+	if _, sy := parent.ScrollOffset(); sy != 0 {
+		t.Fatalf("scroll offset should remain 0, got %d", sy)
+	}
+}
