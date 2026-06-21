@@ -250,3 +250,40 @@ func TestElement_HandleEvent_NonScrollEventsDoNotPropagate(t *testing.T) {
 		t.Fatalf("scroll offset should remain 0, got %d", sy)
 	}
 }
+
+func TestElement_ContainsPoint_WithScrollOffset(t *testing.T) {
+	// A child inside a scrollable container: ContainsPoint should account
+	// for the scroll offset when checking if a screen-space point hits the child.
+	parent := New(WithScrollable(ScrollVertical), WithWidth(20), WithHeight(5))
+	child := New(WithWidth(10), WithHeight(20), WithFocusable(true))
+	parent.AddChild(child)
+
+	buf := NewBuffer(80, 25)
+	parent.Render(buf, 80, 25)
+
+	// Scroll down by 3. Child's screen position moves up by 3.
+	parent.ScrollBy(0, 3)
+	parent.Render(buf, 80, 25)
+
+	// Child's content-space rect is at its layout position.
+	// After scrollY=3, content Y=4 appears at screen Y=1.
+	// Screen Y within the child's visible area should be around 1-2.
+	// ContainsPoint should convert screen Y -> content Y by adding scrollY.
+	cx := child.Rect().X + child.Rect().Width/2
+	cy := child.Rect().Y + child.Rect().Height/2
+	// cy is the content-space center. Screen center = cy - scrollY.
+	scx, scy := cx, cy-3
+
+	if !child.ContainsPoint(scx, scy) {
+		t.Errorf("ContainsPoint(%d, %d) should hit child at content center %d with scrollY=3",
+			scx, scy, cy)
+	}
+
+	// A point far above the child's visible area should miss.
+	// Child is visible from screen Y ~= rectStart - scrollY.
+	// Screen Y=0 maps to content Y=3, which might still be in child.
+	// Use a negative screen Y to guarantee it's above.
+	if child.ContainsPoint(cx, -10) {
+		t.Error("ContainsPoint at screen y=-10 should miss a scrolled-down child")
+	}
+}
