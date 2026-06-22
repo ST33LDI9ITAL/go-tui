@@ -162,12 +162,18 @@ func (e *Element) ContainsPoint(x, y int) bool {
 		// Subtract parent's screen position
 		cx -= p.Rect().X
 		cy -= p.Rect().Y
-		// Scrollable ancestors: children start at content area origin
-		// (which is inside padding + border), and scroll offset shifts
-		// content up. Add scroll offset to match.
+		// Scrollable ancestors: children are positioned from (0,0) in
+		// content-space, which starts after border + padding of the
+		// scrollable container. Add these back to match screen coords.
 		if p.scrollMode != ScrollNone {
 			cx += p.scrollX
 			cy += p.scrollY
+			if p.border != BorderNone {
+				cx++
+				cy++
+			}
+			cx += p.style.Padding.Left
+			cy += p.style.Padding.Top
 		}
 	}
 	return e.layout.Rect.Contains(cx, cy)
