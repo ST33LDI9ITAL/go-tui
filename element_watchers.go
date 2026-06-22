@@ -60,15 +60,15 @@ func (e *Element) WalkWatchers(fn func(Watcher)) {
 
 // --- Hit Testing API ---
 
-// ElementAt finds the deepest element containing the point (x, y).
+// ElementAt finds the deepest element containing the screen-space point (x, y).
 // Returns nil if no element contains the point.
 // Children are checked in reverse order since last child renders on top.
+// Uses ContainsPoint which handles scroll offset conversion correctly.
 func (e *Element) ElementAt(x, y int) *Element {
 	if e.hidden {
 		return nil
 	}
-	bounds := e.Rect()
-	if !bounds.Contains(x, y) {
+	if !e.ContainsPoint(x, y) {
 		return nil
 	}
 
