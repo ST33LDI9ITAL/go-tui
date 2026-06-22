@@ -37,3 +37,21 @@ func HandleClicks(me MouseEvent, bindings ...ClickBinding) bool {
 
 	return false
 }
+
+// HandleContentClicks is like HandleClicks but uses ContainsContentPoint,
+// so clicks on borders and padding are ignored. Only clicks within the
+// element's content area register.
+func HandleContentClicks(me MouseEvent, bindings ...ClickBinding) bool {
+	if me.Button != MouseLeft || me.Action != MousePress {
+		return false
+	}
+
+	for _, b := range bindings {
+		if b.Ref != nil && b.Ref.El() != nil && b.Ref.El().ContainsContentPoint(me.X, me.Y) {
+			b.Fn()
+			return true
+		}
+	}
+
+	return false
+}

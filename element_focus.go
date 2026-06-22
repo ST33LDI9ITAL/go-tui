@@ -185,6 +185,30 @@ func (e *Element) ContainsPoint(x, y int) bool {
 	return e.layout.Rect.Contains(cx, cy)
 }
 
+// ContainsContentPoint returns true if the point (x, y) is within the
+// element's content area (excluding border and padding). Uses the same
+// scroll-aware coordinate conversion as ContainsPoint.
+func (e *Element) ContainsContentPoint(x, y int) bool {
+	cx, cy := x, y
+	for p := e.parent; p != nil; p = p.parent {
+		if p.scrollMode != ScrollNone {
+			sx := p.Rect().X
+			sy := p.Rect().Y
+			if p.border != BorderNone {
+				sx++
+				sy++
+			}
+			sx += p.style.Padding.Left
+			sy += p.style.Padding.Top
+			cx = x - sx + p.scrollX
+			cy = y - sy + p.scrollY
+			break
+		}
+	}
+	// Use ContentRect instead of Rect to exclude border and padding
+	return e.layout.ContentRect.Contains(cx, cy)
+}
+
 // hasWrapOverflow returns true if this element has wrapped text that overflows
 // its content area, enabling auto-scroll with no visible scrollbar.
 func (e *Element) hasWrapOverflow() bool {
