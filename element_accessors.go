@@ -47,6 +47,16 @@ func (e *Element) SetBorderTitle(title string) {
 	e.borderTitle = title
 }
 
+// BorderTitleAlign returns the alignment of the border title.
+func (e *Element) BorderTitleAlign() TextAlign {
+	return e.borderTitleAlign
+}
+
+// SetBorderTitleAlign sets the alignment of the border title.
+func (e *Element) SetBorderTitleAlign(align TextAlign) {
+	e.borderTitleAlign = align
+}
+
 // Background returns the background style, or nil if transparent.
 func (e *Element) Background() *Style {
 	return e.background
@@ -167,11 +177,23 @@ func (e *Element) Component() Component {
 	return e.component
 }
 
-// stringWidth returns the display width of a string in terminal cells.
+// stringWidth returns the display width of a string in terminal cells, measured
+// per grapheme cluster. A flag, ZWJ family emoji, skin-tone emoji, or decomposed
+// accented letter counts as the single glyph the terminal paints rather than the
+// sum of its code points.
+//
+// StringWidth is the exported wrapper.
+func StringWidth(s string) int { return stringWidth(s) }
+
 func stringWidth(s string) int {
 	width := 0
-	for _, r := range s {
-		width += RuneWidth(r)
+	for len(s) > 0 {
+		_, cw, size := nextCluster(s)
+		if size == 0 {
+			break
+		}
+		width += cw
+		s = s[size:]
 	}
 	return width
 }

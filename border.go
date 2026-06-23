@@ -365,9 +365,9 @@ func DrawBoxGradientClipped(buf *Buffer, rect Rect, border BorderStyle, g Gradie
 }
 
 // DrawBoxWithTitle draws a box border with a title in the top border.
-// The title is centered in the top border and truncated if too long.
+// The title is aligned (default: center) and truncated if too long.
 // If the rectangle is smaller than 2x2, the function does nothing.
-func DrawBoxWithTitle(buf *Buffer, rect Rect, border BorderStyle, title string, style Style) {
+func DrawBoxWithTitle(buf *Buffer, rect Rect, border BorderStyle, title string, style Style, align ...TextAlign) {
 	if rect.Width < 2 || rect.Height < 2 {
 		return
 	}
@@ -379,65 +379,90 @@ func DrawBoxWithTitle(buf *Buffer, rect Rect, border BorderStyle, title string, 
 	DrawBox(buf, rect, border, style)
 
 	// Draw the title
-	drawBoxTitle(buf, rect, title, style)
+	drawBoxTitle(buf, rect, title, style, align...)
 }
 
-// drawBoxTitle draws a centered title string on the top border line of the box.
+// titleCluster is one grapheme cluster of a border title with its display width.
+type titleCluster struct {
+	text  string
+	width int
+}
+
+// drawBoxTitle draws an aligned title string on the top border line of the box.
 // drawBoxTitle does not draw the box itself — use DrawBoxWithTitle for that.
-func drawBoxTitle(buf *Buffer, rect Rect, title string, style Style) {
-	runes, startX, ok := prepareTitle(title, rect)
+func drawBoxTitle(buf *Buffer, rect Rect, title string, style Style, align ...TextAlign) {
+	titleAlign := TextAlignCenter
+	if len(align) > 0 {
+		titleAlign = align[0]
+	}
+	clusters, startX, ok := prepareTitle(title, rect, titleAlign)
 	if !ok {
 		return
 	}
 	x := startX
-	for _, r := range runes {
-		buf.SetRune(x, rect.Y, r, style)
-		x += RuneWidth(r)
+	for _, c := range clusters {
+		buf.setCluster(x, rect.Y, c.text, c.width, style, "")
+		x += c.width
 	}
 }
 
-// drawBoxTitleClipped draws a centered title string on the top border line,
-// skipping any rune outside the given clip rectangle.
-func drawBoxTitleClipped(buf *Buffer, rect Rect, title string, style Style, clipRect Rect) {
+// drawBoxTitleClipped draws an aligned title string on the top border line,
+// skipping any cluster outside the given clip rectangle.
+func drawBoxTitleClipped(buf *Buffer, rect Rect, title string, style Style, clipRect Rect, align ...TextAlign) {
 	// Reject if the title row is outside the clip rect's Y range.
 	if rect.Y < clipRect.Y || rect.Y >= clipRect.Y+clipRect.Height {
 		return
 	}
-	runes, startX, ok := prepareTitle(title, rect)
+	titleAlign := TextAlignCenter
+	if len(align) > 0 {
+		titleAlign = align[0]
+	}
+	clusters, startX, ok := prepareTitle(title, rect, titleAlign)
 	if !ok {
 		return
 	}
 	x := startX
-	for _, r := range runes {
-		if x >= clipRect.X && x+RuneWidth(r) <= clipRect.X+clipRect.Width {
-			buf.SetRune(x, rect.Y, r, style)
+	for _, c := range clusters {
+		if x >= clipRect.X && x+c.width <= clipRect.X+clipRect.Width {
+			buf.setCluster(x, rect.Y, c.text, c.width, style, "")
 		}
-		x += RuneWidth(r)
+		x += c.width
 	}
 }
 
-// prepareTitle truncates and centers a title for the given rectangle.
-func prepareTitle(title string, rect Rect) (runes []rune, startX int, ok bool) {
+// prepareTitle truncates and aligns a title for the given rectangle, breaking
+// on grapheme-cluster boundaries so a cluster is never split at the clip edge.
+func prepareTitle(title string, rect Rect, align TextAlign) (clusters []titleCluster, startX int, ok bool) {
 	availableWidth := rect.Width - 2
 	if availableWidth <= 0 {
 		return nil, 0, false
 	}
-	titleRunes := []rune(title)
 	titleWidth := 0
-	truncatedRunes := make([]rune, 0, len(titleRunes))
-	for _, r := range titleRunes {
-		w := RuneWidth(r)
+	rest := title
+	for len(rest) > 0 {
+		cluster, w, size := nextCluster(rest)
+		if size == 0 {
+			break
+		}
 		if titleWidth+w > availableWidth {
 			break
 		}
-		truncatedRunes = append(truncatedRunes, r)
+		clusters = append(clusters, titleCluster{text: cluster, width: w})
 		titleWidth += w
+		rest = rest[size:]
 	}
-	if len(truncatedRunes) == 0 {
+	if len(clusters) == 0 {
 		return nil, 0, false
 	}
-	startX = rect.X + 1 + (availableWidth-titleWidth)/2
-	return truncatedRunes, startX, true
+	switch align {
+	case TextAlignLeft:
+		startX = rect.X + 1
+	case TextAlignRight:
+		startX = rect.X + rect.Width - 1 - titleWidth
+	default:
+		startX = rect.X + 1 + (availableWidth-titleWidth)/2
+	}
+	return clusters, startX, true
 }
 
 // FillBox fills the interior of a box (excluding the border) with a character and style.
